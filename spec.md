@@ -2,7 +2,7 @@
 
 ## Project Specification and Research Plan
 
-**Version:** 0.1  
+**Version:** 0.1.1  
 **Status:** Proposed / Working Specification  
 **Date:** November 2026  
 **Project name:** Undecided  
@@ -113,31 +113,90 @@ Students exploring EEG preprocessing, neural networks, emotion recognition, and 
 
 Developers who need to obtain emotional-state predictions from EEG recordings using a Python API.
 
-## 2.2 Core User Scenarios
+## 2.2 Core User Stories
 
-**UC-01 — Emotion prediction**
+**US-01 — Emotion prediction with a saved pipeline**
 
-A developer supplies an EEG recording to a previously trained model and obtains predicted emotional categories or dimensional values.
+As a **software developer**,  
+I want to load a previously trained pipeline and pass an EEG recording to obtain predicted emotional categories or dimensional values,  
+so that I can integrate EEG-based emotion estimates into an application without re-implementing preprocessing.
 
-**UC-02 — Model training**
+*Acceptance Criteria:*
+- The pipeline validates basic recording compatibility (e.g., channel names/count and sampling rate) before inference.
+- The same preprocessing configuration used during training is applied automatically at inference time.
+- Outputs include predicted labels or dimensional scores, along with basic confidence or uncertainty information where supported.
 
-A researcher uses a labeled EEG dataset to train an emotion-recognition model.
+**US-02 — Dimensional emotion model training**
 
-**UC-03 — Specific emotion classification**
+As a **machine-learning researcher**,  
+I want to train a baseline model (e.g., SVM or EEGNet) for valence or arousal recognition using subject-independent splits,  
+so that I can establish a reliable, leakage-free baseline on datasets such as DEAP.
 
-A researcher trains a classifier to distinguish fear, sadness, happiness, and neutrality from EEG.
+*Acceptance Criteria:*
+- Train/test splits are grouped by participant and trial so windows from the same trial never span both sets.
+- Preprocessing or scaling steps that learn parameters are fitted only on training data.
+- Evaluation reports standard dimensional metrics (e.g., balanced accuracy, macro-F1, ROC-AUC, or MAE/RMSE for regression).
 
-**UC-04 — Preprocessing comparison**
+**US-03 — Specific emotion classification**
 
-A researcher compares conventional band-power features against wavelet and tensor-based representations.
+As a **machine-learning researcher**,  
+I want to train a classifier to distinguish specific emotional categories (e.g., happiness, sadness, fear, and neutrality on SEED-IV),  
+so that I can evaluate recognition beyond broad positive/negative dimensions.
 
-**UC-05 — Model benchmarking**
+*Acceptance Criteria:*
+- Dataset-specific label mappings are explicitly defined and preserved alongside original labels.
+- Evaluation outputs include balanced accuracy, macro-F1, per-class precision/recall, and a confusion matrix.
 
-A researcher evaluates EEGNet, SVM, and another architecture under identical subject-independent test conditions.
+**US-04 — Feature and tensor representation comparison**
 
-**UC-06 — Scientific reproduction**
+As a **machine-learning researcher**,  
+I want to compare conventional spectral features (e.g., PSD, differential entropy) against wavelet and tensor-based representations (e.g., Tucker decomposition) under the same classifier and splits,  
+so that I can determine whether advanced representations improve recognition performance.
 
-A researcher reproduces an experimental configuration from the literature and investigates differences between the reproduced and published results.
+*Acceptance Criteria:*
+- Feature extractors can be swapped without changing the downstream model or evaluation protocol.
+- Decompositions or dimensionality-reduction transforms are fitted strictly on training folds.
+- Key resource metrics (e.g., feature dimensionality and runtime) can be recorded alongside accuracy.
+
+**US-05 — Controlled model benchmarking**
+
+As a **machine-learning researcher**,  
+I want to evaluate multiple architectures (e.g., trivial baseline, SVM, EEGNet, TSception) under identical subject-independent test conditions,  
+so that I can make fair, reproducible comparisons between models.
+
+*Acceptance Criteria:*
+- All compared models use the exact same outer participant/trial partitions and random seeds.
+- Benchmark reports include participant-level variability and basic sanity checks (e.g., majority-class or label-permutation baselines).
+
+**US-06 — Scientific reproduction and auditing**
+
+As a **machine-learning or affective-computing researcher**,  
+I want to run a documented experiment configuration matching a published protocol and compare the results with recorded literature baselines,  
+so that I can verify my implementation and understand any discrepancies.
+
+*Acceptance Criteria:*
+- Experiment configurations (dataset, preprocessing, split strategy, model, seeds) can be saved and re-executed reproducibly.
+- Reports distinguish controlled internal comparisons from descriptive literature reference values.
+
+**US-07 — Label concordance and generalization analysis**
+
+As a **neuroscience or affective-computing researcher**,  
+I want to evaluate models separately on stimulus-assigned labels versus self-reported labels (and across stimuli or elicitation contexts where available),  
+so that I can check whether predictions reflect emotional state rather than stimulus identity or dataset artifacts.
+
+*Acceptance Criteria:*
+- Data structures preserve participant, trial, stimulus, and context identifiers as well as both assigned and self-reported labels.
+- Evaluation protocols support stimulus-held-out or cross-context splits when the dataset provides the required metadata.
+
+**US-08 — Educational exploration of EEG pipelines**
+
+As a **student**,  
+I want to run a self-contained example pipeline on a supported dataset or synthetic fixture and inspect intermediate outputs (filtered signals, spectral features, tensor factors),  
+so that I can learn how EEG preprocessing, representations, and emotion classifiers work in practice.
+
+*Acceptance Criteria:*
+- Intermediate outputs from preprocessing and feature extraction are accessible in standard Python/NumPy/PyTorch structures.
+- Documented example scripts run end-to-end without requiring specialized hardware or manual configuration hacks.
 
 ## 2.3 Initial Scope
 
@@ -353,6 +412,8 @@ Every sample must retain:
 
 These identifiers are essential to preventing evaluation leakage and reconstructing experiments.
 
+Because the selected datasets differ in file formats, channel counts, sampling rates, trial durations, baseline conventions, and label schemas, a unified data-loading interface will be designed around their common structure. Built-in dataset adapters and custom user-supplied datasets will both map into this standardized representation so that downstream preprocessing, feature extraction, and benchmarking work identically regardless of the data source.
+
 Dataset licenses and access restrictions must be respected. The library will not bundle restricted research recordings.
 
 ---
@@ -445,6 +506,16 @@ Additional methods will be prioritized according to experimental results and dev
 
 SVM and EEGNet will be implemented first.
 
+### SVM Baseline Variants
+
+Because "SVM" covers distinct formulations across classification, regression, and kernel choices, the classical SVM baseline will explicitly distinguish:
+
+- **Linear SVM (`LinearSVC` / linear-kernel `SVC`):** Fast linear-margin baseline suited to high-dimensional spectral, differential entropy, and flattened tensor features, and directly comparable to linear-SVC literature benchmarks (e.g., FACED reanalysis).
+- **RBF-Kernel SVM (`SVC` with `rbf` kernel):** Non-linear classical baseline commonly used in DEAP, SEED, SEED-IV, and EmoEEG-MC benchmarks, tuned over regularization (`C`) and kernel width (`gamma`).
+- **Support Vector Regression (`SVR`, linear and RBF kernels):** Continuous regression baseline for dimensional emotion targets (valence, arousal, and dominance).
+- **Multi-class and probability support:** Configurable One-vs-Rest / One-vs-One handling for multi-class emotion tasks, optional class weighting for imbalanced datasets, and probability calibration (e.g., Platt scaling) to support ROC-AUC and uncertainty estimates.
+- **Feature scaling:** Mandatory standardization (e.g., `StandardScaler`) fitted strictly on training partitions to avoid data leakage.
+
 TSception and DGCNN will provide more advanced comparisons, especially for specific emotion classification.
 
 ## 5.6 Confidence and Uncertainty
@@ -526,9 +597,9 @@ The package name is a placeholder.
 
 ## 6.3 Primary Interfaces
 
-**EEGRecording:** Standardized EEG signal and metadata.
+**EEGRecording:** Standardized EEG signal and metadata contract derived from the common structure of the supported datasets.
 
-**DatasetAdapter:** Access to public EEG dataset formats.
+**DatasetAdapter:** Unified loading interface mapping public EEG datasets and custom user-supplied datasets into standardized `EEGRecording` objects.
 
 **EEGPreprocessor:** Signal preprocessing operations.
 
